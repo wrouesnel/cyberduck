@@ -17,6 +17,7 @@ package ch.cyberduck.core.sds;
 
 import ch.cyberduck.core.AlphanumericRandomStringService;
 import ch.cyberduck.core.DisabledConnectionCallback;
+import ch.cyberduck.core.DisabledListProgressListener;
 import ch.cyberduck.core.DisabledLoginCallback;
 import ch.cyberduck.core.Path;
 import ch.cyberduck.core.PathAttributes;
@@ -151,6 +152,26 @@ public class SDSMultipartWriteFeatureTest extends AbstractSDSTest {
         new StreamCopier(status, status).transfer(new ByteArrayInputStream(content), out);
         assertFalse(new DefaultFindFeature(session).find(test));
         out.getStatus();
+    }
+
+    @Test(expected = NotfoundException.class)
+    public void testWriteParentRoomMissing() throws Exception {
+        final SDSNodeIdProvider nodeid = new SDSNodeIdProvider(session).withCache(cache);
+        final String rommname = new AlphanumericRandomStringService().random();
+        final Path room = new SDSDirectoryFeature(session, nodeid).mkdir(
+            new Path(rommname, EnumSet.of(Path.Type.directory, Path.Type.volume, Path.Type.triplecrypt)), null, new TransferStatus());
+        final String fileid = nodeid.getFileid(room, new DisabledListProgressListener());
+        assertEquals(fileid, room.attributes().getVersionId());
+        final Path test = new Path(room, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.file));
+        new SDSDeleteFeature(session, nodeid).delete(Collections.singletonList(room), new DisabledLoginCallback(), new Delete.DisabledCallback());
+        final Path roomDupliate = new SDSDirectoryFeature(session, nodeid).mkdir(
+            new Path(rommname, EnumSet.of(Path.Type.directory, Path.Type.volume, Path.Type.triplecrypt)), null, new TransferStatus());
+        assertNotEquals(fileid, roomDupliate.attributes().getVersionId());
+        final TransferStatus status = new TransferStatus();
+        status.setLength(0L);
+        final SDSMultipartWriteFeature writer = new SDSMultipartWriteFeature(session, nodeid);
+        final HttpResponseOutputStream<VersionId> out = writer.write(test, status, new DisabledConnectionCallback());
+        assertNull(out);
     }
 
     @Test(expected = InteroperabilityException.class)
