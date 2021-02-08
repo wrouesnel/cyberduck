@@ -122,6 +122,11 @@ public class DownloadTransfer extends Transfer {
     }
 
     @Override
+    public Cache<Path> getCache() {
+        return cache;
+    }
+
+    @Override
     public List<TransferItem> list(final Session<?> session, final Path directory,
                                    final Local local, final ListProgressListener listener) throws BackgroundException {
         if(log.isDebugEnabled()) {

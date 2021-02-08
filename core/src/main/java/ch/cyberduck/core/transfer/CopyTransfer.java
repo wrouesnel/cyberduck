@@ -90,6 +90,11 @@ public class CopyTransfer extends Transfer {
     }
 
     @Override
+    public Cache<Path> getCache() {
+        return PathCache.empty();
+    }
+
+    @Override
     public Host getDestination() {
         return destination;
     }

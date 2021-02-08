@@ -76,7 +76,7 @@ public class UploadTransfer extends Transfer {
 
     public UploadTransfer(final Host host, final Path root, final Local local) {
         this(host, Collections.singletonList(new TransferItem(root, local)),
-                PreferencesFactory.get().getBoolean("queue.upload.skip.enable") ? new UploadRegexFilter() : new NullFilter<Local>());
+            PreferencesFactory.get().getBoolean("queue.upload.skip.enable") ? new UploadRegexFilter() : new NullFilter<Local>());
     }
 
     public UploadTransfer(final Host host, final Path root, final Local local, final Filter<Local> f) {
@@ -85,7 +85,7 @@ public class UploadTransfer extends Transfer {
 
     public UploadTransfer(final Host host, final List<TransferItem> roots) {
         this(host, roots,
-                PreferencesFactory.get().getBoolean("queue.upload.skip.enable") ? new UploadRegexFilter() : new NullFilter<Local>());
+            PreferencesFactory.get().getBoolean("queue.upload.skip.enable") ? new UploadRegexFilter() : new NullFilter<Local>());
     }
 
     public UploadTransfer(final Host host, final List<TransferItem> roots, final Filter<Local> f) {
@@ -115,6 +115,11 @@ public class UploadTransfer extends Transfer {
     }
 
     @Override
+    public Cache<Path> getCache() {
+        return cache;
+    }
+
+    @Override
     public List<TransferItem> list(final Session<?> session, final Path remote,
                                    final Local directory, final ListProgressListener listener) throws BackgroundException {
         if(log.isDebugEnabled()) {
@@ -134,7 +139,7 @@ public class UploadTransfer extends Transfer {
         final List<TransferItem> children = new ArrayList<TransferItem>();
         for(Local local : directory.list().filter(comparator, filter)) {
             children.add(new TransferItem(new Path(remote, local.getName(),
-                    local.isDirectory() ? EnumSet.of(Path.Type.directory) : EnumSet.of(Path.Type.file)), local));
+                local.isDirectory() ? EnumSet.of(Path.Type.directory) : EnumSet.of(Path.Type.file)), local));
         }
         return children;
     }
@@ -180,12 +185,12 @@ public class UploadTransfer extends Transfer {
         final TransferAction action;
         if(reloadRequested) {
             action = TransferAction.forName(
-                    PreferencesFactory.get().getProperty("queue.upload.reload.action"));
+                PreferencesFactory.get().getProperty("queue.upload.reload.action"));
         }
         else {
             // Use default
             action = TransferAction.forName(
-                    PreferencesFactory.get().getProperty("queue.upload.action"));
+                PreferencesFactory.get().getProperty("queue.upload.action"));
         }
         if(action.equals(TransferAction.callback)) {
             for(TransferItem upload : roots) {
@@ -236,11 +241,11 @@ public class UploadTransfer extends Transfer {
         if(local.isSymbolicLink()) {
             final Symlink feature = source.getFeature(Symlink.class);
             final UploadSymlinkResolver symlinkResolver
-                    = new UploadSymlinkResolver(feature, roots);
+                = new UploadSymlinkResolver(feature, roots);
             if(symlinkResolver.resolve(local)) {
                 // Make relative symbolic link
                 final String target = symlinkResolver.relativize(local.getAbsolute(),
-                        local.getSymlinkTarget().getAbsolute());
+                    local.getSymlinkTarget().getAbsolute());
                 if(log.isDebugEnabled()) {
                     log.debug(String.format("Create symbolic link from %s to %s", file, target));
                 }
@@ -265,7 +270,7 @@ public class UploadTransfer extends Transfer {
         else if(file.isDirectory()) {
             if(!status.isExists()) {
                 listener.message(MessageFormat.format(LocaleFactory.localizedString("Making directory {0}", "Status"),
-                        file.getName()));
+                    file.getName()));
                 final Directory feature = source.getFeature(Directory.class);
                 feature.mkdir(file, null, status);
                 status.setComplete();

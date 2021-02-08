@@ -393,6 +393,8 @@ public abstract class Transfer implements Serializable {
         timestamp = new Date();
     }
 
+    public abstract Cache<Path> getCache();
+
     /**
      * Recalculate the size of the <code>queue</code>
      */

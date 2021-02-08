@@ -25,6 +25,7 @@ import ch.cyberduck.core.VersionId;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.ConnectionCanceledException;
 import ch.cyberduck.core.exception.InteroperabilityException;
+import ch.cyberduck.core.exception.RetriableAccessDeniedException;
 import ch.cyberduck.core.features.Write;
 import ch.cyberduck.core.http.HttpUploadFeature;
 import ch.cyberduck.core.io.BandwidthThrottle;
@@ -124,24 +125,21 @@ public class SDSDirectS3UploadFeature extends HttpUploadFeature<VersionId, Messa
                 .size(-1 == status.getLength() ? null : status.getLength())
                 .parentId(Long.parseLong(nodeid.getFileid(file.getParent(), new DisabledListProgressListener())))
                 .name(file.getName());
-            String reply;
+            final String uploadId;
             try {
-                reply = new NodesApi(session.getClient())
+                uploadId = new NodesApi(session.getClient())
                     .createFileUploadChannel(createFileUploadRequest, StringUtils.EMPTY).getUploadId();
             }
             catch(ApiException e) {
                 switch(e.getCode()) {
                     case HttpStatus.SC_NOT_FOUND:
-                        log.warn(String.format("Reset cached nodeid %s for file %s", file.getParent().attributes().getVersionId(), file.getParent()));
-                        file.getParent().attributes().setVersionId(null);
-                        createFileUploadRequest.parentId(Long.parseLong(nodeid.getFileid(file.getParent(), new DisabledListProgressListener())));
-                        reply = new NodesApi(session.getClient()).createFileUploadChannel(createFileUploadRequest, StringUtils.EMPTY).getToken();
-                        break;
+                        log.warn(String.format("Failure %s finding parent node for upload %s", e, file));
+                        final BackgroundException cause = new SDSExceptionMappingService().map("Upload {0} failed", e, file);
+                        throw new RetriableAccessDeniedException(cause.getDetail(), cause);
                     default:
                         throw e;
                 }
             }
-            final String uploadId = reply;
             if(log.isDebugEnabled()) {
                 log.debug(String.format("upload started for %s with response %s", file, uploadId));
             }

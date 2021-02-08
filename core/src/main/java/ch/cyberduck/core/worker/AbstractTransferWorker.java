@@ -107,7 +107,7 @@ public abstract class AbstractTransferWorker extends TransferWorker<Boolean> {
                                   final ConnectionCallback connect,
                                   final NotificationService notification,
                                   final Cache<TransferItem> cache) {
-        this(transfer, options, prompt, meter, error, progress, stream, connect, notification, cache, new ConcurrentHashMap<TransferItem, TransferStatus>());
+        this(transfer, options, prompt, meter, error, progress, stream, connect, notification, cache, new ConcurrentHashMap<>());
     }
 
     public AbstractTransferWorker(final Transfer transfer, final TransferOptions options,
@@ -255,7 +255,7 @@ public abstract class AbstractTransferWorker extends TransferWorker<Boolean> {
             throw new TransferCanceledException();
         }
         if(prompt.isSelected(new TransferItem(file, local))) {
-            return this.submit(new RetryTransferCallable(transfer.getSource(),
+            return this.submit(new RetryTransferCallable(transfer, new TransferItem(file, local), transfer.getSource(),
                 preferences.getInteger("transfer.connection.retry"), preferences.getInteger("transfer.connection.retry.delay")) {
 
                 @Override
@@ -299,7 +299,7 @@ public abstract class AbstractTransferWorker extends TransferWorker<Boolean> {
                                 // Call recursively for all children
                                 children = transfer.list(source, file, local, new WorkerListProgressListener(AbstractTransferWorker.this, progress));
                                 // Put into cache for later reference when transferring
-                                cache.put(item, new AttributedList<TransferItem>(children));
+                                cache.put(item, new AttributedList<>(children));
                                 // Call recursively
                                 for(TransferItem f : children) {
                                     // Change download path relative to parent local folder
@@ -366,7 +366,7 @@ public abstract class AbstractTransferWorker extends TransferWorker<Boolean> {
                 if(segment.isComplete()) {
                     continue;
                 }
-                this.submit(new RetryTransferCallable(transfer.getSource(),
+                this.submit(new RetryTransferCallable(transfer, item, transfer.getSource(),
                     preferences.getInteger("transfer.connection.retry"), preferences.getInteger("transfer.connection.retry.delay")) {
 
                     @Override

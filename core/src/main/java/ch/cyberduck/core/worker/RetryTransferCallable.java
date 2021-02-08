@@ -15,18 +15,44 @@ package ch.cyberduck.core.worker;
  * GNU General Public License for more details.
  */
 
+import ch.cyberduck.core.Cache;
 import ch.cyberduck.core.Host;
+import ch.cyberduck.core.Path;
+import ch.cyberduck.core.ProgressListener;
+import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.threading.AbstractRetryCallable;
+import ch.cyberduck.core.threading.BackgroundActionState;
+import ch.cyberduck.core.transfer.Transfer;
+import ch.cyberduck.core.transfer.TransferItem;
 import ch.cyberduck.core.transfer.TransferStatus;
 
-public abstract class RetryTransferCallable extends AbstractRetryCallable<TransferStatus>
-        implements TransferWorker.TransferCallable {
+import org.apache.log4j.Logger;
 
-    public RetryTransferCallable(final Host host) {
-        super(host);
+public abstract class RetryTransferCallable extends AbstractRetryCallable<TransferStatus> implements TransferWorker.TransferCallable {
+    private static final Logger log = Logger.getLogger(RetryTransferCallable.class);
+
+    private final Transfer transfer;
+    private final TransferItem item;
+
+    public RetryTransferCallable(final Transfer transfer, final TransferItem item, final Host host, final int retry, final int delay) {
+        super(host, retry, delay);
+        this.transfer = transfer;
+        this.item = item;
     }
 
-    public RetryTransferCallable(final Host host, final int retry, final int delay) {
-        super(host, retry, delay);
+    @Override
+    public boolean retry(final BackgroundException failure, final ProgressListener progress, final BackgroundActionState cancel) {
+        if(super.retry(failure, progress, cancel)) {
+            Path next = item.remote;
+            while(!next.isRoot()) {
+                log.warn(String.format("Reset version attributes of %s", item.remote));
+                next.attributes().setVersionId(null);
+                next = next.getParent();
+            }
+            final Cache<Path> cache = transfer.getCache();
+            cache.clear();
+            return true;
+        }
+        return false;
     }
 }

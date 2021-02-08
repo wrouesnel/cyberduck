@@ -23,6 +23,7 @@ import ch.cyberduck.core.Version;
 import ch.cyberduck.core.VersionId;
 import ch.cyberduck.core.exception.BackgroundException;
 import ch.cyberduck.core.exception.ChecksumException;
+import ch.cyberduck.core.exception.RetriableAccessDeniedException;
 import ch.cyberduck.core.io.Checksum;
 import ch.cyberduck.core.preferences.PreferencesFactory;
 import ch.cyberduck.core.sds.io.swagger.client.ApiException;
@@ -88,10 +89,9 @@ public class SDSUploadService {
             catch(ApiException e) {
                 switch(e.getCode()) {
                     case HttpStatus.SC_NOT_FOUND:
-                        log.warn(String.format("Reset cached nodeid %s for file %s", file.getParent().attributes().getVersionId(), file.getParent()));
-                        file.getParent().attributes().setVersionId(null);
-                        createFileUploadRequest.parentId(Long.parseLong(nodeid.getFileid(file.getParent(), new DisabledListProgressListener())));
-                        return new NodesApi(session.getClient()).createFileUploadChannel(createFileUploadRequest, StringUtils.EMPTY).getToken();
+                        log.warn(String.format("Failure %s finding parent node for upload %s", e, file));
+                        final BackgroundException cause = new SDSExceptionMappingService().map("Upload {0} failed", e, file);
+                        throw new RetriableAccessDeniedException(cause.getDetail(), cause);
                     default:
                         throw e;
                 }

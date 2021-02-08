@@ -133,6 +133,11 @@ public class SyncTransfer extends Transfer {
     }
 
     @Override
+    public Cache<Path> getCache() {
+        return cache;
+    }
+
+    @Override
     public void setBandwidth(float bytesPerSecond) {
         upload.setBandwidth(bytesPerSecond);
         download.setBandwidth(bytesPerSecond);
