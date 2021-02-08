@@ -24,6 +24,7 @@ import ch.cyberduck.core.io.DisabledStreamListener;
 import ch.cyberduck.core.io.SHA256ChecksumCompute;
 import ch.cyberduck.core.io.StatusOutputStream;
 import ch.cyberduck.core.io.StreamCopier;
+import ch.cyberduck.core.local.DefaultLocalTouchFeature;
 import ch.cyberduck.core.local.TemporaryFileServiceFactory;
 import ch.cyberduck.core.notification.DisabledNotificationService;
 import ch.cyberduck.core.proxy.Proxy;
@@ -259,5 +260,35 @@ public class SingleTransferWorkerTest extends AbstractSDSTest {
         assertTrue(failed.get());
         assertEquals(98305L, new SDSAttributesFinderFeature(session, fileid).find(test).getSize());
         new SDSDeleteFeature(session, fileid).delete(Arrays.asList(test, room), new DisabledLoginCallback(), new Delete.DisabledCallback());
+    }
+
+    @Test
+    public void testTransferDataRooNodeIdChange() throws Exception {
+        final SDSNodeIdProvider nodeid = new SDSNodeIdProvider(session);
+        final Local local = TemporaryFileServiceFactory.get().create(new AlphanumericRandomStringService().random());
+        new DefaultLocalTouchFeature().touch(local);
+        final String rommname = new AlphanumericRandomStringService().random();
+        final Path room = new SDSDirectoryFeature(session, nodeid).mkdir(
+            new Path(rommname, EnumSet.of(Path.Type.directory, Path.Type.volume, Path.Type.triplecrypt)), null, new TransferStatus());
+        final String fileid = nodeid.getFileid(room, new DisabledListProgressListener());
+        assertEquals(fileid, room.attributes().getVersionId());
+        final Path test = new Path(room, new AlphanumericRandomStringService().random(), EnumSet.of(Path.Type.file));
+        new SDSDeleteFeature(session, nodeid).delete(Collections.singletonList(room), new DisabledLoginCallback(), new Delete.DisabledCallback());
+        final Path roomDupliate = new SDSDirectoryFeature(session, nodeid).mkdir(
+            new Path(rommname, EnumSet.of(Path.Type.directory, Path.Type.volume, Path.Type.triplecrypt)), null, new TransferStatus());
+        assertNotEquals(fileid, roomDupliate.attributes().getVersionId());
+        final TransferStatus status = new TransferStatus();
+        status.setLength(0L);
+        final Transfer t = new UploadTransfer(session.getHost(), test, local);
+        assertTrue(new SingleTransferWorker(session, session, t, new TransferOptions(), new TransferSpeedometer(t), new DisabledTransferPrompt() {
+            @Override
+            public TransferAction prompt(final TransferItem file) {
+                return TransferAction.overwrite;
+            }
+        }, new DisabledTransferErrorCallback(),
+            new DisabledProgressListener(), new DisabledStreamListener(), new DisabledLoginCallback(), new DisabledNotificationService()) {
+
+        }.run(session));
+        new SDSDeleteFeature(session, nodeid).delete(Arrays.asList(test, roomDupliate), new DisabledLoginCallback(), new Delete.DisabledCallback());
     }
 }
