@@ -42,7 +42,6 @@ import ch.cyberduck.core.sds.io.swagger.client.ApiException;
 import ch.cyberduck.core.sds.io.swagger.client.api.NodesApi;
 import ch.cyberduck.core.sds.io.swagger.client.model.CompleteS3FileUploadRequest;
 import ch.cyberduck.core.sds.io.swagger.client.model.CreateFileUploadRequest;
-import ch.cyberduck.core.sds.io.swagger.client.model.CreateFileUploadResponse;
 import ch.cyberduck.core.sds.io.swagger.client.model.FileKey;
 import ch.cyberduck.core.sds.io.swagger.client.model.GeneratePresignedUrlsRequest;
 import ch.cyberduck.core.sds.io.swagger.client.model.PresignedUrl;
@@ -59,6 +58,7 @@ import ch.cyberduck.core.threading.ThreadPoolFactory;
 import ch.cyberduck.core.transfer.TransferStatus;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpStatus;
 import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
 
@@ -124,13 +124,29 @@ public class SDSDirectS3UploadFeature extends HttpUploadFeature<VersionId, Messa
                 .size(-1 == status.getLength() ? null : status.getLength())
                 .parentId(Long.parseLong(nodeid.getFileid(file.getParent(), new DisabledListProgressListener())))
                 .name(file.getName());
-            final CreateFileUploadResponse createFileUploadResponse = new NodesApi(session.getClient())
-                .createFileUploadChannel(createFileUploadRequest, StringUtils.EMPTY);
+            String reply;
+            try {
+                reply = new NodesApi(session.getClient())
+                    .createFileUploadChannel(createFileUploadRequest, StringUtils.EMPTY).getUploadId();
+            }
+            catch(ApiException e) {
+                switch(e.getCode()) {
+                    case HttpStatus.SC_NOT_FOUND:
+                        log.warn(String.format("Reset cached nodeid %s for file %s", file.getParent().attributes().getVersionId(), file.getParent()));
+                        file.getParent().attributes().setVersionId(null);
+                        createFileUploadRequest.parentId(Long.parseLong(nodeid.getFileid(file.getParent(), new DisabledListProgressListener())));
+                        reply = new NodesApi(session.getClient()).createFileUploadChannel(createFileUploadRequest, StringUtils.EMPTY).getToken();
+                        break;
+                    default:
+                        throw e;
+                }
+            }
+            final String uploadId = reply;
             if(log.isDebugEnabled()) {
-                log.debug(String.format("upload started for %s with response %s", file, createFileUploadResponse));
+                log.debug(String.format("upload started for %s with response %s", file, uploadId));
             }
             final Map<Integer, TransferStatus> etags = new HashMap<>();
-            final List<PresignedUrl> presignedUrls = this.retrievePresignedUrls(createFileUploadResponse, status);
+            final List<PresignedUrl> presignedUrls = this.retrievePresignedUrls(uploadId, status);
             final List<Future<TransferStatus>> parts = new ArrayList<>();
             final Local source;
             final Buffer buffer;
@@ -214,7 +230,7 @@ public class SDSDirectS3UploadFeature extends HttpUploadFeature<VersionId, Messa
             if(log.isDebugEnabled()) {
                 log.debug(String.format("Complete file upload with %s for %s", completeS3FileUploadRequest, file));
             }
-            new NodesApi(session.getClient()).completeS3FileUpload(completeS3FileUploadRequest, createFileUploadResponse.getUploadId(), StringUtils.EMPTY);
+            new NodesApi(session.getClient()).completeS3FileUpload(completeS3FileUploadRequest, uploadId, StringUtils.EMPTY);
             // Polling
             final ScheduledThreadPool polling = new ScheduledThreadPool();
             final CountDownLatch done = new CountDownLatch(1);
@@ -224,7 +240,7 @@ public class SDSDirectS3UploadFeature extends HttpUploadFeature<VersionId, Messa
                 public void run() {
                     try {
                         final S3FileUploadStatus uploadStatus = new NodesApi(session.getClient())
-                            .requestUploadStatusFiles(createFileUploadResponse.getUploadId(), StringUtils.EMPTY);
+                            .requestUploadStatusFiles(uploadId, StringUtils.EMPTY);
                         switch(uploadStatus.getStatus()) {
                             case "finishing":
                                 // Expected
@@ -274,7 +290,7 @@ public class SDSDirectS3UploadFeature extends HttpUploadFeature<VersionId, Messa
         }
     }
 
-    private List<PresignedUrl> retrievePresignedUrls(final CreateFileUploadResponse createFileUploadResponse,
+    private List<PresignedUrl> retrievePresignedUrls(final String uploadId,
                                                      final TransferStatus status) throws ApiException {
         // Full size of file
         final long size = status.getLength() + status.getOffset();
@@ -289,7 +305,7 @@ public class SDSDirectS3UploadFeature extends HttpUploadFeature<VersionId, Messa
                     // Separate last part with non default part size
                     presignedUrls.addAll(new NodesApi(session.getClient()).generatePresignedUrlsFiles(
                         new GeneratePresignedUrlsRequest().firstPartNumber(partNumber).lastPartNumber(partNumber).size(length),
-                        createFileUploadResponse.getUploadId(), StringUtils.EMPTY).getUrls());
+                        uploadId, StringUtils.EMPTY).getUrls());
                 }
                 else {
                     presignedUrlsRequest.lastPartNumber(partNumber).size(length);
@@ -298,7 +314,7 @@ public class SDSDirectS3UploadFeature extends HttpUploadFeature<VersionId, Messa
             }
         }
         presignedUrls.addAll(0, new NodesApi(session.getClient()).generatePresignedUrlsFiles(presignedUrlsRequest,
-            createFileUploadResponse.getUploadId(), StringUtils.EMPTY).getUrls());
+            uploadId, StringUtils.EMPTY).getUrls());
         return presignedUrls;
     }
 

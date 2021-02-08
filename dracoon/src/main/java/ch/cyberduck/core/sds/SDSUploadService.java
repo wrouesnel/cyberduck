@@ -38,6 +38,7 @@ import ch.cyberduck.core.sds.triplecrypt.TripleCryptExceptionMappingService;
 import ch.cyberduck.core.transfer.TransferStatus;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpStatus;
 import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
 
@@ -66,22 +67,35 @@ public class SDSUploadService {
     }
 
     public String start(final Path file, final TransferStatus status) throws BackgroundException {
-        try {
-            final CreateFileUploadRequest body = new CreateFileUploadRequest()
-                .size(-1 == status.getLength() ? null : status.getLength())
-                .parentId(Long.parseLong(nodeid.getFileid(file.getParent(), new DisabledListProgressListener())))
-                .name(file.getName())
-                .directS3Upload(null);
-            if(status.getTimestamp() != null) {
-                final SoftwareVersionData version = session.softwareVersion();
-                final Matcher matcher = Pattern.compile(SDSSession.VERSION_REGEX).matcher(version.getRestApiVersion());
-                if(matcher.matches()) {
-                    if(new Version(matcher.group(1)).compareTo(new Version(String.valueOf(4.22))) >= 0) {
-                        body.timestampModification(new DateTime(status.getTimestamp()));
-                    }
+        final CreateFileUploadRequest createFileUploadRequest = new CreateFileUploadRequest()
+            .size(-1 == status.getLength() ? null : status.getLength())
+            .parentId(Long.parseLong(nodeid.getFileid(file.getParent(), new DisabledListProgressListener())))
+            .name(file.getName())
+            .directS3Upload(null);
+        if(status.getTimestamp() != null) {
+            final SoftwareVersionData version = session.softwareVersion();
+            final Matcher matcher = Pattern.compile(SDSSession.VERSION_REGEX).matcher(version.getRestApiVersion());
+            if(matcher.matches()) {
+                if(new Version(matcher.group(1)).compareTo(new Version(String.valueOf(4.22))) >= 0) {
+                    createFileUploadRequest.timestampModification(new DateTime(status.getTimestamp()));
                 }
             }
-            return new NodesApi(session.getClient()).createFileUploadChannel(body, StringUtils.EMPTY).getToken();
+        }
+        try {
+            try {
+                return new NodesApi(session.getClient()).createFileUploadChannel(createFileUploadRequest, StringUtils.EMPTY).getToken();
+            }
+            catch(ApiException e) {
+                switch(e.getCode()) {
+                    case HttpStatus.SC_NOT_FOUND:
+                        log.warn(String.format("Reset cached nodeid %s for file %s", file.getParent().attributes().getVersionId(), file.getParent()));
+                        file.getParent().attributes().setVersionId(null);
+                        createFileUploadRequest.parentId(Long.parseLong(nodeid.getFileid(file.getParent(), new DisabledListProgressListener())));
+                        return new NodesApi(session.getClient()).createFileUploadChannel(createFileUploadRequest, StringUtils.EMPTY).getToken();
+                    default:
+                        throw e;
+                }
+            }
         }
         catch(ApiException e) {
             throw new SDSExceptionMappingService().map("Upload {0} failed", e, file);

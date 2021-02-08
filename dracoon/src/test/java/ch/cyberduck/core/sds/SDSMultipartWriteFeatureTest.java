@@ -154,7 +154,7 @@ public class SDSMultipartWriteFeatureTest extends AbstractSDSTest {
         out.getStatus();
     }
 
-    @Test(expected = NotfoundException.class)
+    @Test
     public void testWriteParentRoomMissing() throws Exception {
         final SDSNodeIdProvider nodeid = new SDSNodeIdProvider(session).withCache(cache);
         final String rommname = new AlphanumericRandomStringService().random();
@@ -171,7 +171,9 @@ public class SDSMultipartWriteFeatureTest extends AbstractSDSTest {
         status.setLength(0L);
         final SDSMultipartWriteFeature writer = new SDSMultipartWriteFeature(session, nodeid);
         final HttpResponseOutputStream<VersionId> out = writer.write(test, status, new DisabledConnectionCallback());
-        assertNull(out);
+        assertNotNull(out);
+        out.close();
+        new SDSDeleteFeature(session, nodeid).delete(Collections.singletonList(roomDupliate), new DisabledLoginCallback(), new Delete.DisabledCallback());
     }
 
     @Test(expected = InteroperabilityException.class)
