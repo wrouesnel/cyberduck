@@ -69,6 +69,12 @@ public class SDSTouchFeature implements Touch<VersionId> {
             log.warn(String.format("Validation failed for target name %s", filename));
             return false;
         }
+        if(workdir.attributes().getQuota() != -1) {
+            if(workdir.attributes().getQuota() < workdir.attributes().getSize()) {
+                log.warn(String.format("Quota %d exceeded with %d in %s", workdir.attributes().getQuota(), workdir.attributes().getSize(), workdir));
+                return false;
+            }
+        }
         // for existing files the delete role is also needed but at this point we don't know if it exists or not
         return new SDSPermissionsFeature(session, nodeid).containsRole(workdir, SDSPermissionsFeature.CREATE_ROLE);
     }
